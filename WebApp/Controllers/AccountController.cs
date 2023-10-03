@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NETCore.Encrypt.Extensions;
 using System.Resources;
@@ -9,6 +10,7 @@ using WebApp.Models;
 
 namespace WebApp.Controllers
 {
+    [Authorize]
     public class AccountController : Controller
     {
         private readonly DatabaseContext _databaseContext;
@@ -19,11 +21,12 @@ namespace WebApp.Controllers
             _databaseContext = databaseContext;
             _configuration = configuration;
         }
-
+        [AllowAnonymous]
         public IActionResult Login()
         {
             return View();
         }
+        [AllowAnonymous]
         [HttpPost]
         public IActionResult Login(LoginViewModel model)
         {
@@ -46,6 +49,7 @@ namespace WebApp.Controllers
                     List<Claim> claims = new List<Claim>();
                     claims.Add(new Claim(ClaimTypes.NameIdentifier,user.Id.ToString()));
                     claims.Add(new Claim(ClaimTypes.Name,user.FullName ?? string.Empty));
+                    claims.Add(new Claim(ClaimTypes.Role,user.Role));
                     claims.Add(new Claim("UserName",user.UserName));
 
 
@@ -64,10 +68,14 @@ namespace WebApp.Controllers
             }
             return View(model);
         }
+
+        [AllowAnonymous]
         public IActionResult Register()
         {
             return View();
         }
+
+        [AllowAnonymous]
         [HttpPost]
         public IActionResult Register(RegisterViewModel model)
         {
