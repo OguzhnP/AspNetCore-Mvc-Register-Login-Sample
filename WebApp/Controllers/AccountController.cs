@@ -1,6 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using NETCore.Encrypt.Extensions;
 using System.Resources;
+using System.Security.Claims;
 using WebApp.Entities;
 using WebApp.Models;
 
@@ -26,7 +29,38 @@ namespace WebApp.Controllers
         {
             if (ModelState.IsValid)
             {
+                string md5Salt = _configuration.GetValue<string>("AppSettings:MD5Salt");
+                string saltedPassword = model.Password + md5Salt;
+                string hashedPassword = saltedPassword.MD5();
 
+                User user = _databaseContext.Users.SingleOrDefault(x=> x.UserName.ToLower() == model.UserName.ToLower() && x.Password==hashedPassword);
+
+                if (user!=null)
+                {
+                    if (user.Locked)
+                    {
+                        ModelState.AddModelError(nameof(model.UserName), "User is locked");
+                        return View(model);
+                    }
+
+                    List<Claim> claims = new List<Claim>();
+                    claims.Add(new Claim(ClaimTypes.NameIdentifier,user.Id.ToString()));
+                    claims.Add(new Claim(ClaimTypes.Name,user.FullName ?? string.Empty));
+                    claims.Add(new Claim("UserName",user.UserName));
+
+
+                    ClaimsIdentity identity = new ClaimsIdentity(claims,CookieAuthenticationDefaults.AuthenticationScheme);
+
+                    ClaimsPrincipal principal = new ClaimsPrincipal(identity);
+
+                    HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,principal);
+
+                    return RedirectToAction("Index","Home");
+                }
+                else
+                {
+                    ModelState.AddModelError("","Username or password is incorrect");
+                }
             }
             return View(model);
         }
@@ -39,11 +73,18 @@ namespace WebApp.Controllers
         {
             if (ModelState.IsValid)
             {
+                if (_databaseContext.Users.Any(x=> x.UserName.ToLower()== model.UserName.ToLower()))
+                {
+                    ModelState.AddModelError(nameof(model.UserName), "Username is already exist.");
+                    return View(model);
+                }
+
+
                 string md5Salt = _configuration.GetValue<string>("AppSettings:MD5Salt");
                 string saltedPassword = model.Password + md5Salt;
                 string hashedPassword = saltedPassword.MD5();
 
-                var user = new User()
+                User user = new()
                 {
                     UserName = model.UserName,
                     Password = hashedPassword
@@ -67,6 +108,15 @@ namespace WebApp.Controllers
         public IActionResult Profile()
         {
             return View();
+        }
+
+
+
+        public IActionResult Logout()
+        {
+            HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            return RedirectToAction(nameof(Login));
         }
 
     }
